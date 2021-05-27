@@ -34,7 +34,7 @@
     "orgchart"
   ],
   "dependencies": {
-    "axios": "^0.17.1",
+    "axios": "^0.21.1",
     "orgchart.js": "0.0.4",
     "vue": "^2.5.13",
     "vue-loader": "^14.1.1",
