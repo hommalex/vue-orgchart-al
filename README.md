@@ -1,11 +1,5 @@
 <p align="center">
-  <a href="https://spiritree.github.io/vue-orgchart">
-    <img src="/assets/vue-orgchart.jpg" alt="vue-orgchart logo">
-  </a>
-</p>
-
-<p align="center">
-A Vue wrapper for OrgChart.js.
+A Vue wrapper for A vue component from OrgChart.js.
 </p>
 
 <p align="center">
@@ -18,6 +12,7 @@ A Vue wrapper for OrgChart.js.
 
 - First of all, thanks a lot for dabeng's great work -- [OrgChart.js](https://github.com/dabeng/OrgChart.js)
 - If you prefer the Vue.js Wrapper for Orgchart.js,you could try [my project](https://github.com/spiritree/vue-orgchart)
+- This is just a update of spiritree work
 
 ## Links
 
@@ -33,13 +28,13 @@ A Vue wrapper for OrgChart.js.
 ...
 ## Install
 ```shell
-npm install vue-orgchart -S
+npm install vue-orgchart-al -save
 ```
 ## Quick Start
 
 > In `main.js`
 
-`import 'vue-orgchart/dist/style.min.css'`
+`import 'vue-orgchart-al/dist/style.min.css'`
 
 > In `*.vue`
 
