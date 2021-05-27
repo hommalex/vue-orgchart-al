@@ -46,7 +46,7 @@ npm install vue-orgchart-al -save
 </template>
 
 <script>
-import { VoBasic } from 'vue-orgchart'
+import { VoBasic } from 'vue-orgchart-al'
 export default {
   components: { VoBasic }
   created () {
