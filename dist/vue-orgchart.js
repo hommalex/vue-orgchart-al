@@ -1,7 +1,7 @@
 (function (global, factory) {
 	typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
 	typeof define === 'function' && define.amd ? define(['exports'], factory) :
-	(factory((global['vue-orgchart-al'] = {})));
+	(factory((global['vue-orgchart'] = {})));
 }(this, (function (exports) { 'use strict';
 
 var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) {
@@ -4279,8 +4279,8 @@ var VoBasic = { render: function render() {
         return {};
       }
     },
-    pan: { type: Boolean, default: false },
-    zoom: { type: Boolean, default: false },
+    pan: { type: Boolean, default: true },
+    zoom: { type: Boolean, default: true },
     direction: { type: String, default: 't2b' },
     verticalDepth: { type: Number },
     toggleSiblingsResp: { type: Boolean, default: false },
@@ -4398,8 +4398,8 @@ var VoEdit = { render: function render() {
   name: 'VoEdit',
   props: {
     data: { type: Object },
-    pan: { type: Boolean, default: false },
-    zoom: { type: Boolean, default: false },
+    pan: { type: Boolean, default: true },
+    zoom: { type: Boolean, default: true },
     direction: { type: String, default: 't2b' },
     verticalDepth: { type: Number },
     toggleSiblingsResp: { type: Boolean, default: false },

@@ -4273,8 +4273,8 @@ var VoBasic = { render: function render() {
         return {};
       }
     },
-    pan: { type: Boolean, default: false },
-    zoom: { type: Boolean, default: false },
+    pan: { type: Boolean, default: true },
+    zoom: { type: Boolean, default: true },
     direction: { type: String, default: 't2b' },
     verticalDepth: { type: Number },
     toggleSiblingsResp: { type: Boolean, default: false },
@@ -4392,8 +4392,8 @@ var VoEdit = { render: function render() {
   name: 'VoEdit',
   props: {
     data: { type: Object },
-    pan: { type: Boolean, default: false },
-    zoom: { type: Boolean, default: false },
+    pan: { type: Boolean, default: true },
+    zoom: { type: Boolean, default: true },
     direction: { type: String, default: 't2b' },
     verticalDepth: { type: Number },
     toggleSiblingsResp: { type: Boolean, default: false },

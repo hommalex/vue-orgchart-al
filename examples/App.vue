@@ -1,11 +1,15 @@
 <template>
 <div>
-  <vo-edit style="background: #fff"
+  <br><br><br><br><br><br>
+  <br><br><br><br><br><br>
+  <vo-edit style="background: #c5c5c5"
     :data="chartData"
     :exportButton=true
     :toggleCollapse=true
     exportButtonName="导出"
     exportFilename="test"
+    :pan="true"
+    :zoom="true"
   >
   </vo-edit>
   <div id="edit-panel" class="view-state edit-container">
@@ -41,7 +45,7 @@
 </template>
 
 <script>
-import { VoEdit } from '../dist/vue-orgchart.min.js'
+import { VoEdit } from '../dist/vue-orgchart.js'
 export default {
   components: { VoEdit },
   created () {
@@ -50,7 +54,7 @@ export default {
         children: [
           { name: 'Angular' },
           {
-            name: 'React',
+            multi: [ 'React', 'React 2' ],
             children: [{ name: 'Preact' }]
           },
           {
@@ -170,6 +174,9 @@ export default {
 <style>
 html {
   background: #f0f2f5;
+}
+.orgchart {
+  background: white;
 }
 @media (min-width: 768px) {
   .input-node-container {
