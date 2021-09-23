@@ -1,0 +1,13 @@
+### TO TEST  ###
+
+npm run dev
+all files are in: /dist
+
+### TO PUBLISH  ###
+npm run rollup
+npm publish
+
+# to git
+1. get a new token on the git repo settings
+2. change the password on the config file in /.git/config with the new token/password
+ git push to origin: use tower for that
