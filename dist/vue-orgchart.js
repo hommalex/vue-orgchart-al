@@ -1,7 +1,7 @@
 (function (global, factory) {
 	typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
 	typeof define === 'function' && define.amd ? define(['exports'], factory) :
-	(factory((global['vue-orgchart'] = {})));
+	(factory((global['vue-orgchart-al'] = {})));
 }(this, (function (exports) { 'use strict';
 
 var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) {
@@ -2125,9 +2125,27 @@ var OrgChart$1 = function () {
         var matrix = lastTf.split(',');
 
         if (!lastTf.includes('3d')) {
-          matrix[0] = 'matrix(' + newScale;
-          matrix[3] = newScale;
-          chart.style.transform = lastTf + ' scale(' + newScale + ',' + newScale + ')';
+
+					        var parent = document.getElementById('chart-container').getBoundingClientRect();
+					        var child = document.getElementsByClassName('orgchart')[0].getBoundingClientRect();
+					        var fromLeft = parent.left - (child.left + child.width);
+					        var toLeft = (parent.left + parent.width) - child.left;
+					        var fromTop = parent.top - (child.top + child.height);
+					        var toTop = (parent.top + parent.height) - child.top;
+					        console.log(toTop);
+
+					        matrix[4] = (fromLeft > 0) ? ' ' + (parseFloat(matrix[4]) + fromLeft + 200) :
+															(toLeft < 0) ? ' ' + (parseFloat(matrix[4]) + toLeft - 200) :
+																						' ' + parseFloat(matrix[4]);
+					        matrix[5] = (fromTop > 0) ? ' ' + (parseFloat(matrix[5]) + fromTop + 50) :
+															(toTop < 0) ? ' ' + (parseFloat(matrix[5]) + toTop - 20) :
+																						' ' + parseFloat(matrix[5]);
+
+									console.log( 'aaa', matrix[5] );
+
+					        chart.style.transform = matrix.join(',') + ') scale(' + newScale + ',' + newScale + ')';
+					        // chart.style.transform = lastTf + ' scale(' + newScale + ',' + newScale + ')';
+
         } else {
           chart.style.transform = lastTf + ' scale3d(' + newScale + ',' + newScale + ', 1)';
         }
