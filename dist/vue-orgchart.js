@@ -2141,8 +2141,6 @@ var OrgChart$1 = function () {
 															(toTop < 0) ? ' ' + (parseFloat(matrix[5]) + toTop - 20) :
 																						' ' + parseFloat(matrix[5]);
 
-									console.log( 'aaa', matrix[5] );
-
 					        chart.style.transform = matrix.join(',') + ') scale(' + newScale + ',' + newScale + ')';
 					        // chart.style.transform = lastTf + ' scale(' + newScale + ',' + newScale + ')';
 
