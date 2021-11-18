@@ -148,7 +148,7 @@ var OrgChart$1 = function () {
         data = opts.data,
         chart = document.createElement('div'),
         chartContainer = document.querySelector(opts.chartContainer);
-
+		this.removedPointerEvent = null;
     this.options = opts;
     delete this.options.data;
     this.chart = chart;
@@ -2014,12 +2014,12 @@ var OrgChart$1 = function () {
     value: function _onPanStart(event) {
       var chart = event.currentTarget;
 
-      if (this._closest(event.target, function (el) {
-        return el.classList && el.classList.contains('node');
-      }) || event.touches && event.touches.length > 1) {
-        chart.dataset.panning = false;
-        return;
-      }
+			this._closest(event.target, (el) => {
+				if (el.classList && el.classList.contains('node')) {
+					this.removedPointerEvent = event.target.closest('.node');
+				}
+			});
+
       chart.style.cursor = 'move';
       chart.dataset.panning = true;
 
@@ -2060,6 +2060,10 @@ var OrgChart$1 = function () {
     key: '_onPanning',
     value: function _onPanning(event) {
       var chart = event.currentTarget;
+
+			if (this.removedPointerEvent) {
+				this.removedPointerEvent.style.pointerEvents = 'none';
+			}
 
       if (chart.dataset.panning === 'false') {
         return;
@@ -2106,6 +2110,11 @@ var OrgChart$1 = function () {
     key: '_onPanEnd',
     value: function _onPanEnd(event) {
       var chart = this.chart;
+
+			if (this.removedPointerEvent) {
+				this.removedPointerEvent.removeAttribute("style");
+				this.removedPointerEvent = null;
+			}
 
       if (chart.dataset.panning === 'true') {
         chart.dataset.panning = false;

@@ -3616,6 +3616,14 @@ var freeProcess = moduleExports$2 && freeGlobal.process;
 /** Used to access faster Node.js helpers. */
 var nodeUtil = (function() {
   try {
+    // Use `util.types` for Node.js 10+.
+    var types = freeModule$2 && freeModule$2.require && freeModule$2.require('util').types;
+
+    if (types) {
+      return types;
+    }
+
+    // Legacy `process.binding('util')` for Node.js < 10.
     return freeProcess && freeProcess.binding && freeProcess.binding('util');
   } catch (e) {}
 }());
@@ -3641,6 +3649,26 @@ var nodeIsTypedArray = nodeUtil && nodeUtil.isTypedArray;
  * // => false
  */
 var isTypedArray = nodeIsTypedArray ? baseUnary(nodeIsTypedArray) : baseIsTypedArray;
+
+/**
+ * Gets the value at `key`, unless `key` is "__proto__" or "constructor".
+ *
+ * @private
+ * @param {Object} object The object to query.
+ * @param {string} key The key of the property to get.
+ * @returns {*} Returns the property value.
+ */
+function safeGet(object, key) {
+  if (key === 'constructor' && typeof object[key] === 'function') {
+    return;
+  }
+
+  if (key == '__proto__') {
+    return;
+  }
+
+  return object[key];
+}
 
 /** Used for built-in method references. */
 var objectProto$8 = Object.prototype;
@@ -3736,10 +3764,13 @@ var reIsUint = /^(?:0|[1-9]\d*)$/;
  * @returns {boolean} Returns `true` if `value` is a valid index, else `false`.
  */
 function isIndex(value, length) {
+  var type = typeof value;
   length = length == null ? MAX_SAFE_INTEGER$1 : length;
+
   return !!length &&
-    (typeof value == 'number' || reIsUint.test(value)) &&
-    (value > -1 && value % 1 == 0 && value < length);
+    (type == 'number' ||
+      (type != 'symbol' && reIsUint.test(value))) &&
+        (value > -1 && value % 1 == 0 && value < length);
 }
 
 /** Used for built-in method references. */
@@ -3901,8 +3932,8 @@ function toPlainObject(value) {
  *  counterparts.
  */
 function baseMergeDeep(object, source, key, srcIndex, mergeFunc, customizer, stack) {
-  var objValue = object[key],
-      srcValue = source[key],
+  var objValue = safeGet(object, key),
+      srcValue = safeGet(source, key),
       stacked = stack.get(srcValue);
 
   if (stacked) {
@@ -3945,7 +3976,7 @@ function baseMergeDeep(object, source, key, srcIndex, mergeFunc, customizer, sta
       if (isArguments(objValue)) {
         newValue = toPlainObject(objValue);
       }
-      else if (!isObject(objValue) || (srcIndex && isFunction(objValue))) {
+      else if (!isObject(objValue) || isFunction(objValue)) {
         newValue = initCloneObject(srcValue);
       }
     }
@@ -3978,13 +4009,13 @@ function baseMerge(object, source, srcIndex, customizer, stack) {
     return;
   }
   baseFor(source, function(srcValue, key) {
+    stack || (stack = new Stack);
     if (isObject(srcValue)) {
-      stack || (stack = new Stack);
       baseMergeDeep(object, source, key, srcIndex, baseMerge, customizer, stack);
     }
     else {
       var newValue = customizer
-        ? customizer(object[key], srcValue, (key + ''), object, source, stack)
+        ? customizer(safeGet(object, key), srcValue, (key + ''), object, source, stack)
         : undefined;
 
       if (newValue === undefined) {
@@ -4264,17 +4295,20 @@ var mergeOptions = function mergeOptions(obj, src) {
   return merge(obj, src);
 };
 
-var VoBasic = { render: function render() {
-    var _vm = this;var _h = _vm.$createElement;var _c = _vm._self._c || _h;return _c('div', { staticClass: "vo-basic", attrs: { "id": "chart-container" } });
-  }, staticRenderFns: [],
+//
+//
+//
+//
+
+var script = {
   name: 'orgchart',
   props: {
     data: { type: Object, default: function _default() {
         return {};
       }
     },
-    pan: { type: Boolean, default: true },
-    zoom: { type: Boolean, default: true },
+    pan: { type: Boolean, default: false },
+    zoom: { type: Boolean, default: false },
     direction: { type: String, default: 't2b' },
     verticalDepth: { type: Number },
     toggleSiblingsResp: { type: Boolean, default: false },
@@ -4329,6 +4363,169 @@ var VoBasic = { render: function render() {
     }
   }
 };
+
+function normalizeComponent(template, style, script, scopeId, isFunctionalTemplate, moduleIdentifier /* server only */, shadowMode, createInjector, createInjectorSSR, createInjectorShadow) {
+    if (typeof shadowMode !== 'boolean') {
+        createInjectorSSR = createInjector;
+        createInjector = shadowMode;
+        shadowMode = false;
+    }
+    // Vue.extend constructor export interop.
+    const options = typeof script === 'function' ? script.options : script;
+    // render functions
+    if (template && template.render) {
+        options.render = template.render;
+        options.staticRenderFns = template.staticRenderFns;
+        options._compiled = true;
+        // functional template
+        if (isFunctionalTemplate) {
+            options.functional = true;
+        }
+    }
+    // scopedId
+    if (scopeId) {
+        options._scopeId = scopeId;
+    }
+    let hook;
+    if (moduleIdentifier) {
+        // server build
+        hook = function (context) {
+            // 2.3 injection
+            context =
+                context || // cached call
+                    (this.$vnode && this.$vnode.ssrContext) || // stateful
+                    (this.parent && this.parent.$vnode && this.parent.$vnode.ssrContext); // functional
+            // 2.2 with runInNewContext: true
+            if (!context && typeof __VUE_SSR_CONTEXT__ !== 'undefined') {
+                context = __VUE_SSR_CONTEXT__;
+            }
+            // inject component styles
+            if (style) {
+                style.call(this, createInjectorSSR(context));
+            }
+            // register component module identifier for async chunk inference
+            if (context && context._registeredComponents) {
+                context._registeredComponents.add(moduleIdentifier);
+            }
+        };
+        // used by ssr in case component is cached and beforeCreate
+        // never gets called
+        options._ssrRegister = hook;
+    }
+    else if (style) {
+        hook = shadowMode
+            ? function (context) {
+                style.call(this, createInjectorShadow(context, this.$root.$options.shadowRoot));
+            }
+            : function (context) {
+                style.call(this, createInjector(context));
+            };
+    }
+    if (hook) {
+        if (options.functional) {
+            // register for functional component in vue file
+            const originalRender = options.render;
+            options.render = function renderWithStyleInjection(h, context) {
+                hook.call(context);
+                return originalRender(h, context);
+            };
+        }
+        else {
+            // inject component registration as beforeCreate hook
+            const existing = options.beforeCreate;
+            options.beforeCreate = existing ? [].concat(existing, hook) : [hook];
+        }
+    }
+    return script;
+}
+
+const isOldIE = typeof navigator !== 'undefined' &&
+    /msie [6-9]\\b/.test(navigator.userAgent.toLowerCase());
+function createInjector(context) {
+    return (id, style) => addStyle(id, style);
+}
+let HEAD;
+const styles = {};
+function addStyle(id, css) {
+    const group = isOldIE ? css.media || 'default' : id;
+    const style = styles[group] || (styles[group] = { ids: new Set(), styles: [] });
+    if (!style.ids.has(id)) {
+        style.ids.add(id);
+        let code = css.source;
+        if (css.map) {
+            // https://developer.chrome.com/devtools/docs/javascript-debugging
+            // this makes source maps inside style tags work properly in Chrome
+            code += '\n/*# sourceURL=' + css.map.sources[0] + ' */';
+            // http://stackoverflow.com/a/26603875
+            code +=
+                '\n/*# sourceMappingURL=data:application/json;base64,' +
+                    btoa(unescape(encodeURIComponent(JSON.stringify(css.map)))) +
+                    ' */';
+        }
+        if (!style.element) {
+            style.element = document.createElement('style');
+            style.element.type = 'text/css';
+            if (css.media)
+                style.element.setAttribute('media', css.media);
+            if (HEAD === undefined) {
+                HEAD = document.head || document.getElementsByTagName('head')[0];
+            }
+            HEAD.appendChild(style.element);
+        }
+        if ('styleSheet' in style.element) {
+            style.styles.push(code);
+            style.element.styleSheet.cssText = style.styles
+                .filter(Boolean)
+                .join('\n');
+        }
+        else {
+            const index = style.ids.size - 1;
+            const textNode = document.createTextNode(code);
+            const nodes = style.element.childNodes;
+            if (nodes[index])
+                style.element.removeChild(nodes[index]);
+            if (nodes.length)
+                style.element.insertBefore(textNode, nodes[index]);
+            else
+                style.element.appendChild(textNode);
+        }
+    }
+}
+
+/* script */
+var __vue_script__ = script;
+
+/* template */
+var __vue_render__ = function __vue_render__() {
+  var _vm = this;
+  var _h = _vm.$createElement;
+  var _c = _vm._self._c || _h;
+  return _c("div", {
+    staticClass: "vo-basic",
+    attrs: { id: "chart-container" }
+  });
+};
+var __vue_staticRenderFns__ = [];
+__vue_render__._withStripped = true;
+
+/* style */
+var __vue_inject_styles__ = function __vue_inject_styles__(inject) {
+  if (!inject) return;
+  inject("data-v-4f75dffb_0", { source: "\n#wrapper {\r\n  width: 50%;\r\n  margin: 0 auto;\n}\n#wrapper li {\r\n  margin-top: 20px;\n}\n#wrapper a {\r\n  font-size: 24px;\n}\n#wrapper span {\r\n  font-size: 24px;\n}\n#chart-container {\r\n  position: relative;\r\n  display: inline-block;\r\n  top: 10px;\r\n  left: 10px;\r\n  height: 50%;\r\n  width: calc(100% - 24px);\r\n  border-radius: 5px;\r\n  overflow: auto;\r\n  overflow-x: hidden;\r\n  text-align: center;\r\n  font-family: \"Source Sans Pro\", \"Helvetica Neue\", Arial, sans-serif;\r\n  font-size: 14px;\n}\n.orgchart {\r\n  display: inline-block;\r\n  min-height: 100%;\r\n  min-width: 100%;\r\n  -webkit-touch-callout: none;\r\n  -webkit-user-select: none;\r\n  -moz-user-select: none;\r\n  -ms-user-select: none;\r\n  user-select: none;\r\n  background-size: 10px 10px;\r\n  border: 1px dashed transparent;\n}\n.orgchart .hidden, .orgchart~.hidden {\r\n  display: none;\n}\n.orgchart div,\r\n.orgchart div::before,\r\n.orgchart div::after {\r\n  -webkit-box-sizing: border-box;\r\n  box-sizing: border-box;\n}\n.orgchart.b2t {\r\n  -webkit-transform: rotate(180deg);\r\n  transform: rotate(180deg);\n}\n.orgchart.l2r {\r\n  -webkit-transform: rotate(-90deg) rotateY(180deg);\r\n  transform: rotate(-90deg) rotateY(180deg);\n}\n.orgchart .verticalNodes ul {\r\n  list-style: none;\r\n  margin: 0;\r\n  padding-left: 18px;\r\n  text-align: left;\n}\n.orgchart .verticalNodes ul:first-child {\r\n  margin-top: 3px;\n}\n.orgchart .verticalNodes>td::before {\r\n  content: '';\r\n  border: 1px solid rgba(217, 83, 79, 0.8);\n}\n.orgchart .verticalNodes>td>ul>li:first-child::before {\r\n  top: -4px;\r\n  height: 30px;\r\n  width: calc(50% - 2px);\r\n  border-width: 2px 0 0 2px;\n}\n.orgchart .verticalNodes ul>li {\r\n  position: relative;\n}\n.orgchart .verticalNodes ul>li::before,\r\n.orgchart .verticalNodes ul>li::after {\r\n  content: '';\r\n  position: absolute;\r\n  left: -6px;\r\n  border-color: rgba(217, 83, 79, 0.8);\r\n  border-style: solid;\r\n  border-width: 0 0 2px 2px;\r\n  -webkit-box-sizing: border-box;\r\n  box-sizing: border-box;\n}\n.orgchart .verticalNodes ul>li::before {\r\n  top: -4px;\r\n  height: 30px;\r\n  width: 11px;\n}\n.orgchart .verticalNodes ul>li::after {\r\n  top: 1px;\r\n  height: 100%;\n}\n.orgchart .verticalNodes ul>li:first-child::after {\r\n  top: 24px;\r\n  width: 11px;\r\n  border-width: 2px 0 0 2px;\n}\n.orgchart .verticalNodes ul>li:last-child::after {\r\n  border-width: 2px 0 0;\n}\n.orgchart.r2l {\r\n  -webkit-transform: rotate(90deg);\r\n  transform: rotate(90deg);\n}\n.orgchart>.spinner {\r\n  font-size: 100px;\r\n  margin-top: 30px;\r\n  color: rgba(68, 157, 68, 0.8);\n}\n.orgchart table {\r\n  border-spacing: 0;\r\n  border-collapse: separate;\n}\n.orgchart>table:first-child{\r\n  margin: 20px auto;\n}\n.orgchart td {\r\n  text-align: center;\r\n  vertical-align: top;\r\n  padding: 0;\n}\n.orgchart tr.lines .topLine {\r\n  border-top: 2px solid #616161;\n}\n.orgchart tr.lines .rightLine {\r\n  border-right: 1px solid #616161;\r\n  float: none;\r\n  border-radius: 0;\n}\n.orgchart tr.lines .leftLine {\r\n  border-left: 1px solid #616161;\r\n  float: none;\r\n  border-radius: 0;\n}\n.orgchart tr.lines .downLine {\r\n  background-color: #616161;\r\n  margin: 0 auto;\r\n  height: 20px;\r\n  width: 2px;\r\n  float: none;\n}\r\n\r\n/* node styling */\n.orgchart .node {\r\n  display: inline-block;\r\n  position: relative;\r\n  margin: 0;\r\n  padding: 3px;\r\n  border: 2px dashed transparent;\r\n  text-align: center;\r\n  width: 130px;\n}\n.orgchart.l2r .node, .orgchart.r2l .node {\r\n  width: 40px;\r\n  height: 130px;\n}\n.orgchart .node>.hazy {\r\n  opacity: 0.2;\n}\n.orgchart .node>.spinner {\r\n  position: absolute;\r\n  top: calc(50% - 15px);\r\n  left: calc(50% - 15px);\r\n  vertical-align: middle;\r\n  font-size: 30px;\r\n  color: rgba(68, 157, 68, 0.8);\n}\n.orgchart .node:hover {\r\n  background-color: rgba(238, 217, 54, 0.5);\r\n  -webkit-transition: .5s;\r\n  transition: .5s;\r\n  cursor: default;\r\n  z-index: 20;\n}\n.orgchart .node.focused {\r\n  background-color: rgba(238, 217, 54, 0.5);\n}\n.orgchart .ghost-node {\r\n  position: fixed;\r\n  left: -10000px;\r\n  top: -10000px;\n}\n.orgchart .ghost-node rect {\r\n  fill: #ffffff;\r\n  stroke: #bf0000;\n}\n.orgchart .node.allowedDrop {\r\n  border-color: rgba(68, 157, 68, 0.9);\n}\n.orgchart .node .title {\r\n  text-align: center;\r\n  font-size: 12px;\r\n  font-weight: 300;\r\n  height: 20px;\r\n  line-height: 20px;\r\n  overflow: hidden;\r\n  text-overflow: ellipsis;\r\n  white-space: nowrap;\r\n  background-color: #42b983;\r\n  color: #fff;\r\n  border-radius: 4px 4px 0 0;\n}\n.orgchart.b2t .node .title {\r\n  -webkit-transform: rotate(-180deg);\r\n  transform: rotate(-180deg);\r\n  -webkit-transform-origin: center bottom;\r\n  transform-origin: center bottom;\n}\n.orgchart.l2r .node .title {\r\n  -webkit-transform: rotate(-90deg) translate(-40px, -40px) rotateY(180deg);\r\n  transform: rotate(-90deg) translate(-40px, -40px) rotateY(180deg);\r\n  -webkit-transform-origin: bottom center;\r\n  transform-origin: bottom center;\r\n  width: 120px;\n}\n.orgchart.r2l .node .title {\r\n  -webkit-transform: rotate(-90deg) translate(-40px, -40px);\r\n  transform: rotate(-90deg) translate(-40px, -40px);\r\n  -webkit-transform-origin: bottom center;\r\n  transform-origin: bottom center;\r\n  width: 120px;\n}\n.orgchart .node .title .symbol {\r\n  float: left;\r\n  margin-top: 4px;\r\n  margin-left: 2px;\n}\n.orgchart .node .content {\r\n  width: 100%;\r\n  height: 20px;\r\n  font-size: 11px;\r\n  line-height: 18px;\r\n  border: 1px solid #42b983;\r\n  border-radius: 0 0 4px 4px;\r\n  text-align: center;\r\n  background-color: #fff;\r\n  color: #333;\r\n  overflow: hidden;\r\n  text-overflow: ellipsis;\r\n  white-space: nowrap;\n}\n.orgchart.b2t .node .content {\r\n  -webkit-transform: rotate(180deg);\r\n  transform: rotate(180deg);\r\n  -webkit-transform-origin: center top;\r\n  transform-origin: center top;\n}\n.orgchart.l2r .node .content {\r\n  -webkit-transform: rotate(-90deg) translate(-40px, -40px) rotateY(180deg);\r\n  transform: rotate(-90deg) translate(-40px, -40px) rotateY(180deg);\r\n  -webkit-transform-origin: top center;\r\n  transform-origin: top center;\r\n  width: 120px;\n}\n.orgchart.r2l .node .content {\r\n  -webkit-transform: rotate(-90deg) translate(-40px, -40px);\r\n  transform: rotate(-90deg) translate(-40px, -40px);\r\n  -webkit-transform-origin: top center;\r\n  transform-origin: top center;\r\n  width: 120px;\n}\n.orgchart .node .edge {\r\n  font-size: 15px;\r\n  position: absolute;\r\n  color: rgba(68, 157, 68, 0.5);\r\n  cursor: default;\r\n  transition: .2s;\r\n  -webkit-transition: .2s;\n}\n.orgchart.noncollapsable .node .edge {\r\n  display: none;\n}\n.orgchart .edge:hover {\r\n  color: #449d44;\r\n  cursor: pointer;\n}\n.orgchart .node .verticalEdge {\r\n  width: calc(100% - 10px);\r\n  width: -moz-calc(100% - 10px);\r\n  left: 5px;\n}\n.orgchart .node .topEdge {\r\n  top: -4px;\n}\n.orgchart .node .bottomEdge {\r\n  bottom: -4px;\n}\n.orgchart .node .horizontalEdge {\r\n  width: 15px;\r\n  height: calc(100% - 10px);\r\n  height: -moz-calc(100% - 10px);\r\n  top: 5px;\n}\n.orgchart .node .rightEdge {\r\n  right: -4px;\n}\n.orgchart .node .leftEdge {\r\n  left: -4px;\n}\n.orgchart .node .horizontalEdge::before {\r\n  position: absolute;\r\n  top: calc(50% - 7px);\r\n  top: -moz-calc(50% - 7px);\n}\n.orgchart .node .rightEdge::before {\r\n  right: 3px;\n}\n.orgchart .node .leftEdge::before {\r\n  left: 3px;\n}\n.orgchart .node .toggleBtn {\r\n  position: absolute;\r\n  left: 5px;\r\n  bottom: -2px;\r\n  color: rgba(68, 157, 68, 0.6);\n}\n.orgchart .node .toggleBtn:hover {\r\n  color: rgba(68, 157, 68, 0.8);\n}\n.oc-export-btn {\r\n  display: inline-block;\r\n  position: absolute;\r\n  right: 5px;\r\n  bottom: 5px;\r\n  padding: 6px 12px;\r\n  margin-bottom: 0;\r\n  font-size: 14px;\r\n  font-weight: 400;\r\n  line-height: 1.42857143;\r\n  text-align: center;\r\n  white-space: nowrap;\r\n  vertical-align: middle;\r\n  -ms-touch-action: manipulation;\r\n  touch-action: manipulation;\r\n  cursor: pointer;\r\n  -webkit-user-select: none;\r\n  -moz-user-select: none;\r\n  -ms-user-select: none;\r\n  user-select: none;\r\n  color: #fff;\r\n  background-color: #409eff;\r\n  border: 1px solid transparent;\r\n  border-color: #409eff;\r\n  border-radius: 4px;\n}\n.oc-export-btn:hover,.oc-export-btn:focus,.oc-export-btn:active  {\r\n  background-color: #409eff;\r\n  border-color: #409eff;\n}\n.orgchart~.mask {\r\n  position: absolute;\r\n  top: 0;\r\n  right: 0;\r\n  bottom: 0;\r\n  left: 0;\r\n  z-index: 999;\r\n  text-align: center;\r\n  background-color: rgba(0,0,0,0.3);\n}\n.orgchart~.mask .spinner {\r\n  position: absolute;\r\n  top: calc(50% - 54px);\r\n  left: calc(50% - 54px);\r\n  color: rgba(255,255,255,0.8);\r\n  font-size: 108px;\n}\n.orgchart .node {\r\n  -webkit-transition: all 0.3s;\r\n  transition: all 0.3s;\r\n  top: 0;\r\n  left: 0;\n}\n.orgchart .slide-down {\r\n  opacity: 0;\r\n  top: 40px;\n}\n.orgchart.l2r .node.slide-down, .orgchart.r2l .node.slide-down {\r\n  top: 130px;\n}\n.orgchart .slide-up {\r\n  opacity: 0;\r\n  top: -40px;\n}\n.orgchart.l2r .node.slide-up, .orgchart.r2l .node.slide-up {\r\n  top: -130px;\n}\n.orgchart .slide-right {\r\n  opacity: 0;\r\n  left: 130px;\n}\n.orgchart.l2r .node.slide-right, .orgchart.r2l .node.slide-right {\r\n  left: 40px;\n}\n.orgchart .slide-left {\r\n  opacity: 0;\r\n  left: -130px;\n}\n.orgchart.l2r .node.slide-left, .orgchart.r2l .node.slide-left {\r\n  left: -40px;\n}\n#edit-panel {\r\n  position: relative;\r\n  left: 10px;\r\n  width: calc(100% - 40px);\r\n  border-radius: 4px;\r\n  float: left;\r\n  margin-top: 20px;\r\n  padding: 10px 5px 10px 10px;\r\n  font-size: 14px;\r\n  line-height: 1.5;\r\n  border-radius: 2px;\r\n  color: rgba(0, 0, 0, 0.65);\r\n  background-color: #fff;\n}\n#edit-panel .btn-inputs {\r\n  font-size: 24px;\n}\n#edit-panel label {\r\n  font-weight: bold;\n}\n#edit-panel .new-node {\r\n  height: 24px;\r\n  -webkit-appearance: none;\r\n  background-color:#fff;\r\n  background-image: none;\r\n  border-radius: 4px;\r\n  line-height: 1;\r\n  border: 1px solid #d8dce5;\r\n  -webkit-box-sizing: border-box;\r\n          box-sizing: border-box;\r\n  color: #5a5e66;\r\n  display: inline-block;\r\n  -webkit-transition: border-color .2s cubic-bezier(.645,.045,.355,1);\r\n  transition: border-color .2s cubic-bezier(.645,.045,.355,1);\n}\n#edit-panel .new-node:focus {\r\n  border-color: #409eff;\r\n  outline: none;\n}\n#edit-panel .new-node:hover {\r\n  border-color: #b4bccc;\n}\n#edit-panel.edit-parent-node .selected-node-group{\r\n  display: none;\n}\n#chart-state-panel, #selected-node, #btn-remove-input {\r\n  margin-right: 20px;\n}\n#edit-panel button {\r\n  /* color: #333;\r\n  background-color: #fff; */\r\n  display: inline-block;\r\n  padding: 6px 12px;\r\n  margin-bottom: 0;\r\n  line-height: 1.42857143;\r\n  text-align: center;\r\n  white-space: nowrap;\r\n  border-radius: 4px;\r\n  vertical-align: middle;\r\n  -ms-touch-action: manipulation;\r\n  touch-action: manipulation;\r\n  cursor: pointer;\r\n  -webkit-user-select: none;\r\n  -moz-user-select: none;\r\n  -ms-user-select: none;\r\n  user-select: none;\r\n  background-image: none;\n}\n#edit-panel.edit-parent-node button:not(#btn-add-nodes) {\r\n  display: none;\n}\n#edit-panel button:hover,.edit-panel button:focus,.edit-panel button:active {\r\n  border-color: #409eff;\r\n  -webkit-box-shadow:  0 0 10px #409eff;\r\n          box-shadow:  0 0 10px #409eff;\n}\n#new-nodelist {\r\n  display: inline-block;\r\n  list-style:none;\r\n  margin-top: -2px;\r\n  padding: 0;\r\n  vertical-align: text-top;\n}\n#new-nodelist>* {\r\n  padding-bottom: 4px;\n}\n.btn-inputs {\r\n  vertical-align: sub;\n}\n.btn-inputs:hover {\r\n  text-shadow: 0 0 4px #fff;\n}\n.radio-panel input[type='radio'] {\r\n  border: 1px solid #d8dce5;\r\n  border-radius: 100%;\r\n  cursor: pointer;\r\n  -webkit-box-sizing: border-box;\r\n          box-sizing: border-box;\r\n  display: inline-block;\r\n  height: 14px;\r\n  width: 14px;\r\n  vertical-align: top;\n}\n#edit-panel.view-state .radio-panel input[type='radio']+label {\r\n  font-size: 14px;\r\n  font-weight: 500;\r\n  /* color: #5a5e66; */\r\n  line-height: 1;\n}\n#btn-add-nodes {\r\n  margin-left: 20px;\n}\r\n", map: { "version": 3, "sources": ["C:\\xampp\\htdocs\\vue-orgchart\\src\\components\\VoBasic.vue"], "names": [], "mappings": ";AAmEA;EACA,UAAA;EACA,cAAA;AACA;AAEA;EACA,gBAAA;AACA;AAEA;EACA,eAAA;AACA;AAEA;EACA,eAAA;AACA;AAEA;EACA,kBAAA;EACA,qBAAA;EACA,SAAA;EACA,UAAA;EACA,WAAA;EACA,wBAAA;EACA,kBAAA;EACA,cAAA;EACA,kBAAA;EACA,kBAAA;EACA,mEAAA;EACA,eAAA;AACA;AACA;EACA,qBAAA;EACA,gBAAA;EACA,eAAA;EACA,2BAAA;EACA,yBAAA;EACA,sBAAA;EACA,qBAAA;EACA,iBAAA;EACA,0BAAA;EACA,8BAAA;AACA;AAEA;EACA,aAAA;AACA;AAEA;;;EAGA,8BAAA;EACA,sBAAA;AACA;AAEA;EACA,iCAAA;EACA,yBAAA;AACA;AAEA;EACA,iDAAA;EACA,yCAAA;AACA;AAEA;EACA,gBAAA;EACA,SAAA;EACA,kBAAA;EACA,gBAAA;AACA;AAEA;EACA,eAAA;AACA;AAEA;EACA,WAAA;EACA,wCAAA;AACA;AAEA;EACA,SAAA;EACA,YAAA;EACA,sBAAA;EACA,yBAAA;AACA;AAEA;EACA,kBAAA;AACA;AAEA;;EAEA,WAAA;EACA,kBAAA;EACA,UAAA;EACA,oCAAA;EACA,mBAAA;EACA,yBAAA;EACA,8BAAA;EACA,sBAAA;AACA;AAEA;EACA,SAAA;EACA,YAAA;EACA,WAAA;AACA;AAEA;EACA,QAAA;EACA,YAAA;AACA;AAEA;EACA,SAAA;EACA,WAAA;EACA,yBAAA;AACA;AAEA;EACA,qBAAA;AACA;AAEA;EACA,gCAAA;EACA,wBAAA;AACA;AAEA;EACA,gBAAA;EACA,gBAAA;EACA,6BAAA;AACA;AAEA;EACA,iBAAA;EACA,yBAAA;AACA;AAEA;EACA,iBAAA;AACA;AAEA;EACA,kBAAA;EACA,mBAAA;EACA,UAAA;AACA;AAEA;EACA,6BAAA;AACA;AAEA;EACA,+BAAA;EACA,WAAA;EACA,gBAAA;AACA;AAEA;EACA,8BAAA;EACA,WAAA;EACA,gBAAA;AACA;AAEA;EACA,yBAAA;EACA,cAAA;EACA,YAAA;EACA,UAAA;EACA,WAAA;AACA;;AAEA,iBAAA;AACA;EACA,qBAAA;EACA,kBAAA;EACA,SAAA;EACA,YAAA;EACA,8BAAA;EACA,kBAAA;EACA,YAAA;AACA;AAEA;EACA,WAAA;EACA,aAAA;AACA;AAEA;EACA,YAAA;AACA;AAEA;EACA,kBAAA;EACA,qBAAA;EACA,sBAAA;EACA,sBAAA;EACA,eAAA;EACA,6BAAA;AACA;AAEA;EACA,yCAAA;EACA,uBAAA;EACA,eAAA;EACA,eAAA;EACA,WAAA;AACA;AAEA;EACA,yCAAA;AACA;AAEA;EACA,eAAA;EACA,cAAA;EACA,aAAA;AACA;AAEA;EACA,aAAA;EACA,eAAA;AACA;AAEA;EACA,oCAAA;AACA;AAEA;EACA,kBAAA;EACA,eAAA;EACA,gBAAA;EACA,YAAA;EACA,iBAAA;EACA,gBAAA;EACA,uBAAA;EACA,mBAAA;EACA,yBAAA;EACA,WAAA;EACA,0BAAA;AACA;AAEA;EACA,kCAAA;EACA,0BAAA;EACA,uCAAA;EACA,+BAAA;AACA;AAEA;EACA,yEAAA;EACA,iEAAA;EACA,uCAAA;EACA,+BAAA;EACA,YAAA;AACA;AAEA;EACA,yDAAA;EACA,iDAAA;EACA,uCAAA;EACA,+BAAA;EACA,YAAA;AACA;AAEA;EACA,WAAA;EACA,eAAA;EACA,gBAAA;AACA;AAEA;EACA,WAAA;EACA,YAAA;EACA,eAAA;EACA,iBAAA;EACA,yBAAA;EACA,0BAAA;EACA,kBAAA;EACA,sBAAA;EACA,WAAA;EACA,gBAAA;EACA,uBAAA;EACA,mBAAA;AACA;AAEA;EACA,iCAAA;EACA,yBAAA;EACA,oCAAA;EACA,4BAAA;AACA;AAEA;EACA,yEAAA;EACA,iEAAA;EACA,oCAAA;EACA,4BAAA;EACA,YAAA;AACA;AAEA;EACA,yDAAA;EACA,iDAAA;EACA,oCAAA;EACA,4BAAA;EACA,YAAA;AACA;AAEA;EACA,eAAA;EACA,kBAAA;EACA,6BAAA;EACA,eAAA;EACA,eAAA;EACA,uBAAA;AACA;AAEA;EACA,aAAA;AACA;AAEA;EACA,cAAA;EACA,eAAA;AACA;AAEA;EACA,wBAAA;EACA,6BAAA;EACA,SAAA;AACA;AAEA;EACA,SAAA;AACA;AAEA;EACA,YAAA;AACA;AAEA;EACA,WAAA;EACA,yBAAA;EACA,8BAAA;EACA,QAAA;AACA;AAEA;EACA,WAAA;AACA;AAEA;EACA,UAAA;AACA;AAEA;EACA,kBAAA;EACA,oBAAA;EACA,yBAAA;AACA;AAEA;EACA,UAAA;AACA;AAEA;EACA,SAAA;AACA;AAEA;EACA,kBAAA;EACA,SAAA;EACA,YAAA;EACA,6BAAA;AACA;AAEA;EACA,6BAAA;AACA;AAEA;EACA,qBAAA;EACA,kBAAA;EACA,UAAA;EACA,WAAA;EACA,iBAAA;EACA,gBAAA;EACA,eAAA;EACA,gBAAA;EACA,uBAAA;EACA,kBAAA;EACA,mBAAA;EACA,sBAAA;EACA,8BAAA;EACA,0BAAA;EACA,eAAA;EACA,yBAAA;EACA,sBAAA;EACA,qBAAA;EACA,iBAAA;EACA,WAAA;EACA,yBAAA;EACA,6BAAA;EACA,qBAAA;EACA,kBAAA;AACA;AAEA;EACA,yBAAA;EACA,qBAAA;AACA;AAEA;EACA,kBAAA;EACA,MAAA;EACA,QAAA;EACA,SAAA;EACA,OAAA;EACA,YAAA;EACA,kBAAA;EACA,iCAAA;AACA;AAEA;EACA,kBAAA;EACA,qBAAA;EACA,sBAAA;EACA,4BAAA;EACA,gBAAA;AACA;AAEA;EACA,4BAAA;EACA,oBAAA;EACA,MAAA;EACA,OAAA;AACA;AAEA;EACA,UAAA;EACA,SAAA;AACA;AAEA;EACA,UAAA;AACA;AAEA;EACA,UAAA;EACA,UAAA;AACA;AAEA;EACA,WAAA;AACA;AAEA;EACA,UAAA;EACA,WAAA;AACA;AAEA;EACA,UAAA;AACA;AAEA;EACA,UAAA;EACA,YAAA;AACA;AAEA;EACA,WAAA;AACA;AACA;EACA,kBAAA;EACA,UAAA;EACA,wBAAA;EACA,kBAAA;EACA,WAAA;EACA,gBAAA;EACA,2BAAA;EACA,eAAA;EACA,gBAAA;EACA,kBAAA;EACA,0BAAA;EACA,sBAAA;AACA;AAEA;EACA,eAAA;AACA;AAEA;EACA,iBAAA;AACA;AAEA;EACA,YAAA;EACA,wBAAA;EACA,qBAAA;EACA,sBAAA;EACA,kBAAA;EACA,cAAA;EACA,yBAAA;EACA,8BAAA;UACA,sBAAA;EACA,cAAA;EACA,qBAAA;EACA,mEAAA;EACA,2DAAA;AACA;AAEA;EACA,qBAAA;EACA,aAAA;AACA;AAEA;EACA,qBAAA;AACA;AAEA;EACA,aAAA;AACA;AAEA;EACA,kBAAA;AACA;AAEA;EACA;2BACA;EACA,qBAAA;EACA,iBAAA;EACA,gBAAA;EACA,uBAAA;EACA,kBAAA;EACA,mBAAA;EACA,kBAAA;EACA,sBAAA;EACA,8BAAA;EACA,0BAAA;EACA,eAAA;EACA,yBAAA;EACA,sBAAA;EACA,qBAAA;EACA,iBAAA;EACA,sBAAA;AACA;AAEA;EACA,aAAA;AACA;AAEA;EACA,qBAAA;EACA,qCAAA;UACA,6BAAA;AACA;AAEA;EACA,qBAAA;EACA,eAAA;EACA,gBAAA;EACA,UAAA;EACA,wBAAA;AACA;AAEA;EACA,mBAAA;AACA;AAEA;EACA,mBAAA;AACA;AAGA;EACA,yBAAA;AACA;AAEA;EACA,yBAAA;EACA,mBAAA;EACA,eAAA;EACA,8BAAA;UACA,sBAAA;EACA,qBAAA;EACA,YAAA;EACA,WAAA;EACA,mBAAA;AACA;AAEA;EACA,eAAA;EACA,gBAAA;EACA,oBAAA;EACA,cAAA;AACA;AAEA;EACA,iBAAA;AACA", "file": "VoBasic.vue", "sourcesContent": ["<template>\r\n<div id=\"chart-container\" class=\"vo-basic\"></div>\r\n</template>\r\n\r\n<script>\r\nimport OrgChart from '../lib/orgchart'\r\nimport { mergeOptions } from '../lib/lodash.js'\r\nexport default {\r\n  name: 'orgchart',\r\n  props: {\r\n    data: { type: Object, default () { return {} } },\r\n    pan: { type: Boolean, default: false },\r\n    zoom: { type: Boolean, default: false },\r\n    direction: { type: String, default: 't2b' },\r\n    verticalDepth: { type: Number },\r\n    toggleSiblingsResp: { type: Boolean, default: false },\r\n    ajaxURL: { type: Object },\r\n    depth: { type: Number, default: 999 },\r\n    nodeTitle: { type: String, default: 'name' },\r\n    parentNodeSymbol: { type: String, default: '' },\r\n    nodeContent: { type: String },\r\n    nodeId: { type: String, default: 'id' },\r\n    createNode: { type: Function },\r\n    exportButton: { type: Boolean, default: false },\r\n    exportButtonName: { type: String, default: 'Export' },\r\n    exportFilename: { type: String },\r\n    chartClass: { type: String, default: '' },\r\n    draggable: { type: Boolean, default: false },\r\n    dropCriteria: { type: Function },\r\n    toggleCollapse: { type: Boolean, default: true }\r\n  },\r\n  data () {\r\n    return {\r\n      newData: null,\r\n      orgchart: null,\r\n      defaultOptions: {\r\n        'chartContainer': '#chart-container'\r\n      }\r\n    }\r\n  },\r\n  mounted() {\r\n    this.newData === null ? this.initOrgChart() : null\r\n  },\r\n  methods: {\r\n    initOrgChart() {\r\n      const opts = mergeOptions(this.defaultOptions, this.$props)\r\n      this.orgchart = new OrgChart(opts)\r\n    }\r\n  },\r\n  watch: {\r\n    data(newVal) {\r\n      this.newData = newVal\r\n      const promise = new Promise((resolve) => {\r\n        if (newVal) {\r\n          resolve()\r\n        }\r\n      })\r\n      promise.then(() => {\r\n        const opts = mergeOptions(this.defaultOptions, this.$props)\r\n        this.orgchart = new OrgChart(opts)\r\n      })\r\n    }\r\n  }\r\n}\r\n</script>\r\n\r\n<style>\r\n#wrapper {\r\n  width: 50%;\r\n  margin: 0 auto;\r\n}\r\n\r\n#wrapper li {\r\n  margin-top: 20px;\r\n}\r\n\r\n#wrapper a {\r\n  font-size: 24px;\r\n}\r\n\r\n#wrapper span {\r\n  font-size: 24px;\r\n}\r\n\r\n#chart-container {\r\n  position: relative;\r\n  display: inline-block;\r\n  top: 10px;\r\n  left: 10px;\r\n  height: 50%;\r\n  width: calc(100% - 24px);\r\n  border-radius: 5px;\r\n  overflow: auto;\r\n  overflow-x: hidden;\r\n  text-align: center;\r\n  font-family: \"Source Sans Pro\", \"Helvetica Neue\", Arial, sans-serif;\r\n  font-size: 14px;\r\n}\r\n.orgchart {\r\n  display: inline-block;\r\n  min-height: 100%;\r\n  min-width: 100%;\r\n  -webkit-touch-callout: none;\r\n  -webkit-user-select: none;\r\n  -moz-user-select: none;\r\n  -ms-user-select: none;\r\n  user-select: none;\r\n  background-size: 10px 10px;\r\n  border: 1px dashed transparent;\r\n}\r\n\r\n.orgchart .hidden, .orgchart~.hidden {\r\n  display: none;\r\n}\r\n\r\n.orgchart div,\r\n.orgchart div::before,\r\n.orgchart div::after {\r\n  -webkit-box-sizing: border-box;\r\n  box-sizing: border-box;\r\n}\r\n\r\n.orgchart.b2t {\r\n  -webkit-transform: rotate(180deg);\r\n  transform: rotate(180deg);\r\n}\r\n\r\n.orgchart.l2r {\r\n  -webkit-transform: rotate(-90deg) rotateY(180deg);\r\n  transform: rotate(-90deg) rotateY(180deg);\r\n}\r\n\r\n.orgchart .verticalNodes ul {\r\n  list-style: none;\r\n  margin: 0;\r\n  padding-left: 18px;\r\n  text-align: left;\r\n}\r\n\r\n.orgchart .verticalNodes ul:first-child {\r\n  margin-top: 3px;\r\n}\r\n\r\n.orgchart .verticalNodes>td::before {\r\n  content: '';\r\n  border: 1px solid rgba(217, 83, 79, 0.8);\r\n}\r\n\r\n.orgchart .verticalNodes>td>ul>li:first-child::before {\r\n  top: -4px;\r\n  height: 30px;\r\n  width: calc(50% - 2px);\r\n  border-width: 2px 0 0 2px;\r\n}\r\n\r\n.orgchart .verticalNodes ul>li {\r\n  position: relative;\r\n}\r\n\r\n.orgchart .verticalNodes ul>li::before,\r\n.orgchart .verticalNodes ul>li::after {\r\n  content: '';\r\n  position: absolute;\r\n  left: -6px;\r\n  border-color: rgba(217, 83, 79, 0.8);\r\n  border-style: solid;\r\n  border-width: 0 0 2px 2px;\r\n  -webkit-box-sizing: border-box;\r\n  box-sizing: border-box;\r\n}\r\n\r\n.orgchart .verticalNodes ul>li::before {\r\n  top: -4px;\r\n  height: 30px;\r\n  width: 11px;\r\n}\r\n\r\n.orgchart .verticalNodes ul>li::after {\r\n  top: 1px;\r\n  height: 100%;\r\n}\r\n\r\n.orgchart .verticalNodes ul>li:first-child::after {\r\n  top: 24px;\r\n  width: 11px;\r\n  border-width: 2px 0 0 2px;\r\n}\r\n\r\n.orgchart .verticalNodes ul>li:last-child::after {\r\n  border-width: 2px 0 0;\r\n}\r\n\r\n.orgchart.r2l {\r\n  -webkit-transform: rotate(90deg);\r\n  transform: rotate(90deg);\r\n}\r\n\r\n.orgchart>.spinner {\r\n  font-size: 100px;\r\n  margin-top: 30px;\r\n  color: rgba(68, 157, 68, 0.8);\r\n}\r\n\r\n.orgchart table {\r\n  border-spacing: 0;\r\n  border-collapse: separate;\r\n}\r\n\r\n.orgchart>table:first-child{\r\n  margin: 20px auto;\r\n}\r\n\r\n.orgchart td {\r\n  text-align: center;\r\n  vertical-align: top;\r\n  padding: 0;\r\n}\r\n\r\n.orgchart tr.lines .topLine {\r\n  border-top: 2px solid #616161;\r\n}\r\n\r\n.orgchart tr.lines .rightLine {\r\n  border-right: 1px solid #616161;\r\n  float: none;\r\n  border-radius: 0;\r\n}\r\n\r\n.orgchart tr.lines .leftLine {\r\n  border-left: 1px solid #616161;\r\n  float: none;\r\n  border-radius: 0;\r\n}\r\n\r\n.orgchart tr.lines .downLine {\r\n  background-color: #616161;\r\n  margin: 0 auto;\r\n  height: 20px;\r\n  width: 2px;\r\n  float: none;\r\n}\r\n\r\n/* node styling */\r\n.orgchart .node {\r\n  display: inline-block;\r\n  position: relative;\r\n  margin: 0;\r\n  padding: 3px;\r\n  border: 2px dashed transparent;\r\n  text-align: center;\r\n  width: 130px;\r\n}\r\n\r\n.orgchart.l2r .node, .orgchart.r2l .node {\r\n  width: 40px;\r\n  height: 130px;\r\n}\r\n\r\n.orgchart .node>.hazy {\r\n  opacity: 0.2;\r\n}\r\n\r\n.orgchart .node>.spinner {\r\n  position: absolute;\r\n  top: calc(50% - 15px);\r\n  left: calc(50% - 15px);\r\n  vertical-align: middle;\r\n  font-size: 30px;\r\n  color: rgba(68, 157, 68, 0.8);\r\n}\r\n\r\n.orgchart .node:hover {\r\n  background-color: rgba(238, 217, 54, 0.5);\r\n  -webkit-transition: .5s;\r\n  transition: .5s;\r\n  cursor: default;\r\n  z-index: 20;\r\n}\r\n\r\n.orgchart .node.focused {\r\n  background-color: rgba(238, 217, 54, 0.5);\r\n}\r\n\r\n.orgchart .ghost-node {\r\n  position: fixed;\r\n  left: -10000px;\r\n  top: -10000px;\r\n}\r\n\r\n.orgchart .ghost-node rect {\r\n  fill: #ffffff;\r\n  stroke: #bf0000;\r\n}\r\n\r\n.orgchart .node.allowedDrop {\r\n  border-color: rgba(68, 157, 68, 0.9);\r\n}\r\n\r\n.orgchart .node .title {\r\n  text-align: center;\r\n  font-size: 12px;\r\n  font-weight: 300;\r\n  height: 20px;\r\n  line-height: 20px;\r\n  overflow: hidden;\r\n  text-overflow: ellipsis;\r\n  white-space: nowrap;\r\n  background-color: #42b983;\r\n  color: #fff;\r\n  border-radius: 4px 4px 0 0;\r\n}\r\n\r\n.orgchart.b2t .node .title {\r\n  -webkit-transform: rotate(-180deg);\r\n  transform: rotate(-180deg);\r\n  -webkit-transform-origin: center bottom;\r\n  transform-origin: center bottom;\r\n}\r\n\r\n.orgchart.l2r .node .title {\r\n  -webkit-transform: rotate(-90deg) translate(-40px, -40px) rotateY(180deg);\r\n  transform: rotate(-90deg) translate(-40px, -40px) rotateY(180deg);\r\n  -webkit-transform-origin: bottom center;\r\n  transform-origin: bottom center;\r\n  width: 120px;\r\n}\r\n\r\n.orgchart.r2l .node .title {\r\n  -webkit-transform: rotate(-90deg) translate(-40px, -40px);\r\n  transform: rotate(-90deg) translate(-40px, -40px);\r\n  -webkit-transform-origin: bottom center;\r\n  transform-origin: bottom center;\r\n  width: 120px;\r\n}\r\n\r\n.orgchart .node .title .symbol {\r\n  float: left;\r\n  margin-top: 4px;\r\n  margin-left: 2px;\r\n}\r\n\r\n.orgchart .node .content {\r\n  width: 100%;\r\n  height: 20px;\r\n  font-size: 11px;\r\n  line-height: 18px;\r\n  border: 1px solid #42b983;\r\n  border-radius: 0 0 4px 4px;\r\n  text-align: center;\r\n  background-color: #fff;\r\n  color: #333;\r\n  overflow: hidden;\r\n  text-overflow: ellipsis;\r\n  white-space: nowrap;\r\n}\r\n\r\n.orgchart.b2t .node .content {\r\n  -webkit-transform: rotate(180deg);\r\n  transform: rotate(180deg);\r\n  -webkit-transform-origin: center top;\r\n  transform-origin: center top;\r\n}\r\n\r\n.orgchart.l2r .node .content {\r\n  -webkit-transform: rotate(-90deg) translate(-40px, -40px) rotateY(180deg);\r\n  transform: rotate(-90deg) translate(-40px, -40px) rotateY(180deg);\r\n  -webkit-transform-origin: top center;\r\n  transform-origin: top center;\r\n  width: 120px;\r\n}\r\n\r\n.orgchart.r2l .node .content {\r\n  -webkit-transform: rotate(-90deg) translate(-40px, -40px);\r\n  transform: rotate(-90deg) translate(-40px, -40px);\r\n  -webkit-transform-origin: top center;\r\n  transform-origin: top center;\r\n  width: 120px;\r\n}\r\n\r\n.orgchart .node .edge {\r\n  font-size: 15px;\r\n  position: absolute;\r\n  color: rgba(68, 157, 68, 0.5);\r\n  cursor: default;\r\n  transition: .2s;\r\n  -webkit-transition: .2s;\r\n}\r\n\r\n.orgchart.noncollapsable .node .edge {\r\n  display: none;\r\n}\r\n\r\n.orgchart .edge:hover {\r\n  color: #449d44;\r\n  cursor: pointer;\r\n}\r\n\r\n.orgchart .node .verticalEdge {\r\n  width: calc(100% - 10px);\r\n  width: -moz-calc(100% - 10px);\r\n  left: 5px;\r\n}\r\n\r\n.orgchart .node .topEdge {\r\n  top: -4px;\r\n}\r\n\r\n.orgchart .node .bottomEdge {\r\n  bottom: -4px;\r\n}\r\n\r\n.orgchart .node .horizontalEdge {\r\n  width: 15px;\r\n  height: calc(100% - 10px);\r\n  height: -moz-calc(100% - 10px);\r\n  top: 5px;\r\n}\r\n\r\n.orgchart .node .rightEdge {\r\n  right: -4px;\r\n}\r\n\r\n.orgchart .node .leftEdge {\r\n  left: -4px;\r\n}\r\n\r\n.orgchart .node .horizontalEdge::before {\r\n  position: absolute;\r\n  top: calc(50% - 7px);\r\n  top: -moz-calc(50% - 7px);\r\n}\r\n\r\n.orgchart .node .rightEdge::before {\r\n  right: 3px;\r\n}\r\n\r\n.orgchart .node .leftEdge::before {\r\n  left: 3px;\r\n}\r\n\r\n.orgchart .node .toggleBtn {\r\n  position: absolute;\r\n  left: 5px;\r\n  bottom: -2px;\r\n  color: rgba(68, 157, 68, 0.6);\r\n}\r\n\r\n.orgchart .node .toggleBtn:hover {\r\n  color: rgba(68, 157, 68, 0.8);\r\n}\r\n\r\n.oc-export-btn {\r\n  display: inline-block;\r\n  position: absolute;\r\n  right: 5px;\r\n  bottom: 5px;\r\n  padding: 6px 12px;\r\n  margin-bottom: 0;\r\n  font-size: 14px;\r\n  font-weight: 400;\r\n  line-height: 1.42857143;\r\n  text-align: center;\r\n  white-space: nowrap;\r\n  vertical-align: middle;\r\n  -ms-touch-action: manipulation;\r\n  touch-action: manipulation;\r\n  cursor: pointer;\r\n  -webkit-user-select: none;\r\n  -moz-user-select: none;\r\n  -ms-user-select: none;\r\n  user-select: none;\r\n  color: #fff;\r\n  background-color: #409eff;\r\n  border: 1px solid transparent;\r\n  border-color: #409eff;\r\n  border-radius: 4px;\r\n}\r\n\r\n.oc-export-btn:hover,.oc-export-btn:focus,.oc-export-btn:active  {\r\n  background-color: #409eff;\r\n  border-color: #409eff;\r\n}\r\n\r\n.orgchart~.mask {\r\n  position: absolute;\r\n  top: 0;\r\n  right: 0;\r\n  bottom: 0;\r\n  left: 0;\r\n  z-index: 999;\r\n  text-align: center;\r\n  background-color: rgba(0,0,0,0.3);\r\n}\r\n\r\n.orgchart~.mask .spinner {\r\n  position: absolute;\r\n  top: calc(50% - 54px);\r\n  left: calc(50% - 54px);\r\n  color: rgba(255,255,255,0.8);\r\n  font-size: 108px;\r\n}\r\n\r\n.orgchart .node {\r\n  -webkit-transition: all 0.3s;\r\n  transition: all 0.3s;\r\n  top: 0;\r\n  left: 0;\r\n}\r\n\r\n.orgchart .slide-down {\r\n  opacity: 0;\r\n  top: 40px;\r\n}\r\n\r\n.orgchart.l2r .node.slide-down, .orgchart.r2l .node.slide-down {\r\n  top: 130px;\r\n}\r\n\r\n.orgchart .slide-up {\r\n  opacity: 0;\r\n  top: -40px;\r\n}\r\n\r\n.orgchart.l2r .node.slide-up, .orgchart.r2l .node.slide-up {\r\n  top: -130px;\r\n}\r\n\r\n.orgchart .slide-right {\r\n  opacity: 0;\r\n  left: 130px;\r\n}\r\n\r\n.orgchart.l2r .node.slide-right, .orgchart.r2l .node.slide-right {\r\n  left: 40px;\r\n}\r\n\r\n.orgchart .slide-left {\r\n  opacity: 0;\r\n  left: -130px;\r\n}\r\n\r\n.orgchart.l2r .node.slide-left, .orgchart.r2l .node.slide-left {\r\n  left: -40px;\r\n}\r\n#edit-panel {\r\n  position: relative;\r\n  left: 10px;\r\n  width: calc(100% - 40px);\r\n  border-radius: 4px;\r\n  float: left;\r\n  margin-top: 20px;\r\n  padding: 10px 5px 10px 10px;\r\n  font-size: 14px;\r\n  line-height: 1.5;\r\n  border-radius: 2px;\r\n  color: rgba(0, 0, 0, 0.65);\r\n  background-color: #fff;\r\n}\r\n\r\n#edit-panel .btn-inputs {\r\n  font-size: 24px;\r\n}\r\n\r\n#edit-panel label {\r\n  font-weight: bold;\r\n}\r\n\r\n#edit-panel .new-node {\r\n  height: 24px;\r\n  -webkit-appearance: none;\r\n  background-color:#fff;\r\n  background-image: none;\r\n  border-radius: 4px;\r\n  line-height: 1;\r\n  border: 1px solid #d8dce5;\r\n  -webkit-box-sizing: border-box;\r\n          box-sizing: border-box;\r\n  color: #5a5e66;\r\n  display: inline-block;\r\n  -webkit-transition: border-color .2s cubic-bezier(.645,.045,.355,1);\r\n  transition: border-color .2s cubic-bezier(.645,.045,.355,1);\r\n}\r\n\r\n#edit-panel .new-node:focus {\r\n  border-color: #409eff;\r\n  outline: none;\r\n}\r\n\r\n#edit-panel .new-node:hover {\r\n  border-color: #b4bccc;\r\n}\r\n\r\n#edit-panel.edit-parent-node .selected-node-group{\r\n  display: none;\r\n}\r\n\r\n#chart-state-panel, #selected-node, #btn-remove-input {\r\n  margin-right: 20px;\r\n}\r\n\r\n#edit-panel button {\r\n  /* color: #333;\r\n  background-color: #fff; */\r\n  display: inline-block;\r\n  padding: 6px 12px;\r\n  margin-bottom: 0;\r\n  line-height: 1.42857143;\r\n  text-align: center;\r\n  white-space: nowrap;\r\n  border-radius: 4px;\r\n  vertical-align: middle;\r\n  -ms-touch-action: manipulation;\r\n  touch-action: manipulation;\r\n  cursor: pointer;\r\n  -webkit-user-select: none;\r\n  -moz-user-select: none;\r\n  -ms-user-select: none;\r\n  user-select: none;\r\n  background-image: none;\r\n}\r\n\r\n#edit-panel.edit-parent-node button:not(#btn-add-nodes) {\r\n  display: none;\r\n}\r\n\r\n#edit-panel button:hover,.edit-panel button:focus,.edit-panel button:active {\r\n  border-color: #409eff;\r\n  -webkit-box-shadow:  0 0 10px #409eff;\r\n          box-shadow:  0 0 10px #409eff;\r\n}\r\n\r\n#new-nodelist {\r\n  display: inline-block;\r\n  list-style:none;\r\n  margin-top: -2px;\r\n  padding: 0;\r\n  vertical-align: text-top;\r\n}\r\n\r\n#new-nodelist>* {\r\n  padding-bottom: 4px;\r\n}\r\n\r\n.btn-inputs {\r\n  vertical-align: sub;\r\n}\r\n\r\n\r\n.btn-inputs:hover {\r\n  text-shadow: 0 0 4px #fff;\r\n}\r\n\r\n.radio-panel input[type='radio'] {\r\n  border: 1px solid #d8dce5;\r\n  border-radius: 100%;\r\n  cursor: pointer;\r\n  -webkit-box-sizing: border-box;\r\n          box-sizing: border-box;\r\n  display: inline-block;\r\n  height: 14px;\r\n  width: 14px;\r\n  vertical-align: top;\r\n}\r\n\r\n#edit-panel.view-state .radio-panel input[type='radio']+label {\r\n  font-size: 14px;\r\n  font-weight: 500;\r\n  /* color: #5a5e66; */\r\n  line-height: 1;\r\n}\r\n\r\n#btn-add-nodes {\r\n  margin-left: 20px;\r\n}\r\n</style>\r\n"] }, media: undefined });
+};
+/* scoped */
+var __vue_scope_id__ = undefined;
+/* module identifier */
+var __vue_module_identifier__ = undefined;
+/* functional template */
+var __vue_is_functional_template__ = false;
+/* component normalizer */
+/* style inject */
+/* style inject SSR */
+
+/* style inject shadow dom */
+
+var __vue_component__ = /*#__PURE__*/normalizeComponent({ render: __vue_render__, staticRenderFns: __vue_staticRenderFns__ }, __vue_inject_styles__, __vue_script__, __vue_scope_id__, __vue_is_functional_template__, __vue_module_identifier__, false, createInjector, undefined, undefined);
 
 var closest = function closest(el, fn) {
   return el && (fn(el) && el !== document.querySelector('.orgchart') ? el : closest(el.parentNode, fn));
@@ -4386,14 +4583,17 @@ var getId = function getId() {
   return new Date().getTime() * 1000 + Math.floor(Math.random() * 1001);
 };
 
-var VoEdit = { render: function render() {
-    var _vm = this;var _h = _vm.$createElement;var _c = _vm._self._c || _h;return _c('div', { staticClass: "vo-edit", attrs: { "id": "chart-container" } });
-  }, staticRenderFns: [],
+//
+//
+//
+//
+
+var script$1 = {
   name: 'VoEdit',
   props: {
     data: { type: Object },
-    pan: { type: Boolean, default: true },
-    zoom: { type: Boolean, default: true },
+    pan: { type: Boolean, default: false },
+    zoom: { type: Boolean, default: false },
     direction: { type: String, default: 't2b' },
     verticalDepth: { type: Number },
     toggleSiblingsResp: { type: Boolean, default: false },
@@ -4456,9 +4656,39 @@ var VoEdit = { render: function render() {
   }
 };
 
+/* script */
+var __vue_script__$1 = script$1;
+
+/* template */
+var __vue_render__$1 = function __vue_render__() {
+  var _vm = this;
+  var _h = _vm.$createElement;
+  var _c = _vm._self._c || _h;
+  return _c("div", { staticClass: "vo-edit", attrs: { id: "chart-container" } });
+};
+var __vue_staticRenderFns__$1 = [];
+__vue_render__$1._withStripped = true;
+
+/* style */
+var __vue_inject_styles__$1 = undefined;
+/* scoped */
+var __vue_scope_id__$1 = undefined;
+/* module identifier */
+var __vue_module_identifier__$1 = undefined;
+/* functional template */
+var __vue_is_functional_template__$1 = false;
+/* component normalizer */
+/* style inject */
+
+/* style inject SSR */
+
+/* style inject shadow dom */
+
+var __vue_component__$1 = /*#__PURE__*/normalizeComponent({ render: __vue_render__$1, staticRenderFns: __vue_staticRenderFns__$1 }, __vue_inject_styles__$1, __vue_script__$1, __vue_scope_id__$1, __vue_is_functional_template__$1, __vue_module_identifier__$1, false, undefined, undefined, undefined);
+
 if (typeof window !== 'undefined' && window.Vue) {
-  window.Vue.component('vo-basic', VoBasic);
-  window.Vue.component('vo-edit', VoEdit);
+  window.Vue.component('vo-basic', __vue_component__);
+  window.Vue.component('vo-edit', __vue_component__$1);
 }
 
-export { VoBasic, VoEdit };
+export { __vue_component__ as VoBasic, __vue_component__$1 as VoEdit };

@@ -4,7 +4,8 @@ npm run dev
 all files are in: /dist
 
 ### TO PUBLISH  ###
-npm run rollup
+manually minified /dist/vue-orgchart.js and style.css
+change version in package.json
 npm publish
 
 # to git
